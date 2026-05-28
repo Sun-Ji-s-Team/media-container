@@ -1,0 +1,28 @@
+name = "media-findai"
+main = "dist/container.js"
+compatibility_date = "2026-05-26"
+
+[[containers]]
+max_instances = 5
+class_name = "MediaContainer"
+image = "./Dockerfile"
+
+[[durable_objects.bindings]]
+name = "MEDIA_CONTAINER"
+class_name = "MediaContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MediaContainer"]
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[vars]
+APP_ENV = "production"
