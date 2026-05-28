@@ -18,25 +18,8 @@ export class MediaContainer extends Container {
   }
 }
 
-export class BgRemovalContainer extends Container {
-  defaultPort = 8080;
-  sleepAfter = 60_000;
-
-  async onStart(): Promise<void> {
-    console.log("[BgRemovalContainer] starting background removal container");
-  }
-
-  async onError(err: Error): Promise<void> {
-    console.error("[BgRemovalContainer] error:", err.message);
-  }
-
-  async onStop(): Promise<void> {
-    console.log("[BgRemovalContainer] stopping");
-  }
-}
-
 /**
- * Fallback: use Cloudflare Images transformation for background removal.
+ * Background removal via Cloudflare Images transformation.
  * Only works with publicly accessible image URLs.
  */
 async function removeBackgroundViaCfImages(imageUrl: string, format: string): Promise<Response | null> {
@@ -69,40 +52,30 @@ export class MediaInternal extends WorkerEntrypoint<Env> {
     const url = new URL(request.url);
     console.log(`[MediaInternal] ${request.method} ${url.pathname}`);
 
-    // Background removal: try container first, fallback to CF Images
+    // Background removal: use Cloudflare Images transformation
     if (request.method === "POST" && url.pathname === "/image/remove-bg") {
-      const body = await request.clone().text();
-
       try {
-        const id = this.env.BG_REMOVAL_CONTAINER.idFromName("default");
-        const stub = this.env.BG_REMOVAL_CONTAINER.get(id);
-        const resp = await stub.fetch(new Request(request.url, {
-          method: request.method,
-          headers: request.headers,
-          body,
-        }));
-
-        if (resp.ok) return resp;
-
-        // Container failed, try CF Images fallback
-        console.log("[MediaInternal] container failed, trying CF Images fallback");
+        const body = await request.text();
         const { image, format = "png" } = JSON.parse(body) as { image: string; format?: string };
-        const fallback = await removeBackgroundViaCfImages(image, format);
-        if (fallback) return fallback;
 
-        // Return original container error
-        return resp;
-      } catch (err) {
-        // Container unreachable, try CF Images fallback
-        console.log("[MediaInternal] container error, trying CF Images fallback:", err);
-        try {
-          const { image, format = "png" } = JSON.parse(body) as { image: string; format?: string };
+        if (image && (image.startsWith("http://") || image.startsWith("https://"))) {
           const fallback = await removeBackgroundViaCfImages(image, format);
           if (fallback) return fallback;
-        } catch { /* ignore parse errors */ }
+        }
 
-        return new Response(JSON.stringify({ success: false, error: "Background removal service unavailable" }), {
-          status: 503,
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Background removal requires a publicly accessible image URL",
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Invalid request",
+        }), {
+          status: 400,
           headers: { "Content-Type": "application/json" },
         });
       }
@@ -118,8 +91,6 @@ export class MediaInternal extends WorkerEntrypoint<Env> {
 interface Env {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   MEDIA_CONTAINER: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  BG_REMOVAL_CONTAINER: any;
   APP_ENV: string;
 }
 
