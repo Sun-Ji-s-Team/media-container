@@ -22,29 +22,55 @@ async function fetchImage(src: string): Promise<Buffer> {
     if (!resp.ok) throw new Error(`Failed to fetch image: ${resp.status}`);
     return Buffer.from(await resp.arrayBuffer());
   }
+  // Assume raw base64
   return Buffer.from(src, "base64");
 }
 
+function guessMime(buf: Buffer): string {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
+  if (buf[0] === 0x52 && buf[1] === 0x49) return "image/webp";
+  return "application/octet-stream";
+}
+
 const server = http.createServer(async (req, res) => {
-  if (req.method === "GET" && new URL(req.url || "/", "http://localhost").pathname === "/health") {
+  const reqUrl = new URL(req.url || "/", "http://localhost");
+
+  if (req.method === "GET" && reqUrl.pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ success: true, data: { status: "ok" } }));
     return;
   }
 
-  if (req.method === "POST" && new URL(req.url || "/", "http://localhost").pathname === "/image/remove-bg") {
+  if (req.method === "POST" && reqUrl.pathname === "/image/remove-bg") {
     try {
       const raw = await readBody(req);
       const { image, format = "png" } = JSON.parse(raw) as { image: string; format?: string };
-      const input = await fetchImage(image);
 
+      if (!image) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Missing image field" }));
+        return;
+      }
+
+      const input = await fetchImage(image);
+      const inputMime = guessMime(input);
+      console.log(`[bgremoval] input: ${input.length} bytes, detected: ${inputMime}, output format: ${format}`);
+
+      const outputMime = format === "webp" ? "image/webp" : "image/png";
       const blob = await removeBackground(input, {
-        output: { format: format === "webp" ? "image/webp" : "image/png" },
+        output: { format: outputMime },
       });
 
       const output = Buffer.from(await blob.arrayBuffer());
-      res.writeHead(200, { "Content-Type": format === "webp" ? "image/webp" : "image/png" });
-      res.end(output);
+      console.log(`[bgremoval] output: ${output.length} bytes`);
+
+      // Return as base64 JSON (matching caller expectation)
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        success: true,
+        image: `data:${outputMime};base64,${output.toString("base64")}`,
+      }));
     } catch (err) {
       console.error("[bgremoval] error:", err);
       res.writeHead(500, { "Content-Type": "application/json" });
