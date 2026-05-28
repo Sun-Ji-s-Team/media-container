@@ -7,26 +7,13 @@ max_instances = 5
 class_name = "MediaContainer"
 image = "./Dockerfile"
 
-[[containers]]
-max_instances = 3
-class_name = "BgRemovalContainer"
-image = "./Dockerfile.bgremoval"
-
 [[durable_objects.bindings]]
 name = "MEDIA_CONTAINER"
 class_name = "MediaContainer"
 
-[[durable_objects.bindings]]
-name = "BG_REMOVAL_CONTAINER"
-class_name = "BgRemovalContainer"
-
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MediaContainer"]
-
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = ["BgRemovalContainer"]
 
 [observability]
 enabled = true
@@ -36,6 +23,11 @@ enabled = true
 head_sampling_rate = 1
 persist = true
 invocation_logs = true
+
+[[services]]
+binding = "ACCOUNT_INTERNAL"
+service = "account-findai"
+entrypoint = "AccountInternal"
 
 [vars]
 APP_ENV = "production"

@@ -1,9 +1,0 @@
-{
-  "name": "media-bgremoval",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@imgly/background-removal-node": "^1.4.5"
-  }
-}
