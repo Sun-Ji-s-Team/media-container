@@ -1,6 +1,6 @@
 import type http from "node:http";
 import sharp from "sharp";
-import type { ApiResponse, ImageProcessRequest, RemoveBgRequest, StitchImageRequest } from "../types.js";
+import type { ApiResponse, ImageProcessRequest, StitchImageRequest } from "../types.js";
 
 interface RouteContext {
   readBody(req: http.IncomingMessage): Promise<string>;
@@ -29,23 +29,6 @@ export async function imageRouter(
   const { readBody, jsonBody } = ctx;
 
   try {
-    // POST /image/remove-bg
-    if (req.method === "POST" && url.pathname === "/image/remove-bg") {
-      const raw = await readBody(req);
-      const { image, format = "png" } = JSON.parse(raw) as RemoveBgRequest;
-      const input = await fetchImage(image);
-
-      const { removeBackground } = await import("@imgly/background-removal-node");
-      const blob = await removeBackground(input, {
-        output: { format: format === "webp" ? "image/webp" : "image/png" },
-      });
-
-      const output = Buffer.from(await blob.arrayBuffer());
-      res.writeHead(200, { "Content-Type": format === "webp" ? "image/webp" : "image/png" });
-      res.end(output);
-      return;
-    }
-
     // POST /image/process (resize/compress/convert)
     if (req.method === "POST" && url.pathname === "/image/process") {
       const raw = await readBody(req);
